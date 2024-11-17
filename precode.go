@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
-	"sync"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -42,11 +42,9 @@ var tasks = map[string]Task{
 	},
 }
 
-var mu sync.Mutex
-
 // Ниже напишите обработчики для каждого эндпоинта
 // ...
-
+// Обработчик для возврата всех элементов — их у нас два.
 func getTasks(w http.ResponseWriter, r *http.Request) {
 	// сериализуем данные из слайса
 	resp, err := json.Marshal(tasks)
@@ -55,7 +53,7 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// в заголовок записываем тип контента, у нас это данные в формате JSON
+	// в заголовок записываем тип контента, у нас это данные в формате JSON.
 	w.Header().Set("Content-Type", "application/json")
 	// так как все успешно, то статус OK
 	w.WriteHeader(http.StatusOK)
@@ -63,6 +61,7 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 	w.Write(resp)
 }
 
+// обработчик addTask по запросу POST от клиента по адресу /tasks к существующим элементам добавляется новый.
 func addTask(w http.ResponseWriter, r *http.Request) {
 
 	var task Task
@@ -79,21 +78,27 @@ func addTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mu.Lock()
+	_, ok := tasks[task.ID]
+	if ok {
+		http.Error(w, "ID уже существует", http.StatusBadRequest)
+		return
+	}
+
 	tasks[task.ID] = task
-	mu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 }
 
+// обработчик getTask, будет возвращать информацию о конкретной по ID в запросе.
 func getTask(w http.ResponseWriter, r *http.Request) {
 
+	//Функция chi.URLParam(r, "id") возвращает значение параметра из URL.
 	id := chi.URLParam(r, "id")
 
 	task, ok := tasks[id]
 	if !ok {
-		http.Error(w, "ID не найден", http.StatusNoContent)
+		http.Error(w, "ID не найден", http.StatusNotFound)
 		return
 	}
 
@@ -105,27 +110,20 @@ func getTask(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write(resp)
+
+	if _, err := w.Write(resp); err != nil {
+		log.Printf("Write response error: %v", err)
+
+	}
 }
 
 func deleteTask(w http.ResponseWriter, r *http.Request) {
 
-	if r.Method != http.MethodDelete {
-		http.Error(w, "метод не разрешен", http.StatusMethodNotAllowed)
-		return
-	}
-
 	id := chi.URLParam(r, "id")
-	if id == "" {
-		http.Error(w, "id не предусмотрен", http.StatusBadRequest)
-		return
-	}
 
-	mu.Lock()
-	defer mu.Unlock()
-
-	if _, exists := tasks[id]; !exists {
-		http.Error(w, "задача не найдена", http.StatusNotFound)
+	_, ok := tasks[id]
+	if !ok {
+		http.Error(w, "ID не найден", http.StatusBadRequest)
 		return
 	}
 
@@ -133,12 +131,6 @@ func deleteTask(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-
-	response := map[string]string{"message": "Задача успешно удалена"}
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, "Ошибка кодирования ответа на запрос JSON", http.StatusInternalServerError)
-		return
-	}
 }
 
 func main() {
