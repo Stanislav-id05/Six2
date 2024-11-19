@@ -1,5 +1,9 @@
 module github.com/Yandex-Practicum/go-rest-api-homework
 
-go 1.20
+go 1.21
 
-require github.com/go-chi/chi/v5 v5.0.10 // indirect
+toolchain go1.23.2
+
+require (
+	github.com/go-chi/chi/v5 v5.1.0
+)
